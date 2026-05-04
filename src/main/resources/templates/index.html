@@ -114,6 +114,9 @@
             showLoading();
             clearError();
             
+            // 换问题时先隐藏错误位置
+            document.getElementById('errorPlace').style.display = 'none';
+            
             fetch('/syllabus/title')
                 .then(response => {
                     if (!response.ok) {
