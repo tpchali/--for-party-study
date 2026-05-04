@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>党章学习系统</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1a5fb4;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .question {
+            font-size: 18px;
+            line-height: 1.6;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #1a5fb4;
+        }
+        .answer {
+            font-size: 16px;
+            line-height: 1.6;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e9f7fe;
+            border-left: 4px solid #007bff;
+            display: none;
+        }
+        .stats {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #fff8e1;
+            border-left: 4px solid #ffc107;
+        }
+        .btn {
+            background-color: #1a5fb4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .btn:hover {
+            background-color: #0d47a1;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        .error {
+            color: #dc3545;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 党章学习系统</h1>
+        
+        <div class="question" id="question">
+            <strong>问题：</strong><span id="questionText">正在加载...</span>
+        </div>
+        
+        <div class="answer" id="answer">
+            <strong>答案：</strong><span id="answerText"></span>
+        </div>
+        
+        <div class="stats">
+            <strong>错误次数：</strong><span id="wrongTime">0</span>
+            <br>
+            <strong>错误位置：</strong><span id="errorPlace" style="display:none;">未记录</span>
+            <br>
+            <button class="btn btn-danger" onclick="addWrongTime()">❌ 增加错误次数</button>
+            <button class="btn" onclick="addErrorPlace()">📍 记录错误位置</button>
+            <button class="btn" onclick="toggleErrorPlace()">🔍 查看错误位置</button>
+            <button class="btn" onclick="showAnswer()">✅ 显示答案</button>
+            <button class="btn" onclick="loadNewQuestion()">🔄 换一个问题</button>
+        </div>
+        
+        <div class="loading" id="loading" style="display:none;">正在加载中...</div>
+        <div class="error" id="error" style="display:none;"></div>
+    </div>
+
+    <script>
+        let currentQuestionId = null;
+        
+        // 页面加载时获取第一个问题
+        document.addEventListener('DOMContentLoaded', function() {
+            loadNewQuestion();
+        });
+        
+        function loadNewQuestion() {
+            showLoading();
+            clearError();
+            
+            fetch('/syllabus/title')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('获取问题失败: ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // data 是 {id: value, title: value} 格式
+                    const keys = Object.keys(data);
+                    if (keys.length > 0) {
+                        currentQuestionId = parseInt(keys[0]);
+                        document.getElementById('questionText').textContent = data[keys[0]];
+                        document.getElementById('answerText').textContent = '';
+                        document.getElementById('answer').style.display = 'none';
+                        
+                        // 获取当前错误次数
+                        getWrongTime();
+                    } else {
+                        throw new Error('未获取到问题');
+                    }
+                })
+                .catch(error => {
+                    showError('加载问题失败: ' + error.message);
+                })
+                .finally(() => {
+                    hideLoading();
+                });
+        }
+        
+        function showAnswer() {
+            if (currentQuestionId === null) return;
+            
+            showLoading();
+            clearError();
+            
+            fetch('/syllabus/answer?id=' + currentQuestionId)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('获取答案失败: ' + response.status);
+                    }
+                    return response.text();
+                })
+                .then(answer => {
+                    document.getElementById('answerText').textContent = answer;
+                    document.getElementById('answer').style.display = 'block';
+                })
+                .catch(error => {
+                    showError('获取答案失败: ' + error.message);
+                })
+                .finally(() => {
+                    hideLoading();
+                });
+        }
+        
+        function addWrongTime() {
+            if (currentQuestionId === null) return;
+            
+            showLoading();
+            clearError();
+            
+            fetch('/syllabus/addwrongTime?id=' + currentQuestionId, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('增加错误次数失败: ' + response.status);
+                    }
+                    return response.text();
+                })
+                .then(result => {
+                    // 更新错误次数显示
+                    getWrongTime();
+                })
+                .catch(error => {
+                    showError('增加错误次数失败: ' + error.message);
+                })
+                .finally(() => {
+                    hideLoading();
+                });
+        }
+        
+        function getWrongTime() {
+            if (currentQuestionId === null) return;
+            
+            fetch('/syllabus/wrongTime?id=' + currentQuestionId)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('获取错误次数失败: ' + response.status);
+                    }
+                    return response.text();
+                })
+                .then(wrongTime => {
+                    document.getElementById('wrongTime').textContent = wrongTime;
+                })
+                .catch(error => {
+                    // 如果获取错误次数失败，显示0
+                    document.getElementById('wrongTime').textContent = '0';
+                });
+            
+            // 同时获取错误位置
+            getErrorPlace();
+        }
+        
+        function getErrorPlace() {
+            if (currentQuestionId === null) return;
+            
+            fetch('/syllabus/errorplace?id=' + currentQuestionId)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('获取错误位置失败: ' + response.status);
+                    }
+                    return response.text();
+                })
+                .then(errorPlace => {
+                    document.getElementById('errorPlace').textContent = errorPlace || '未记录';
+                    // 获取到错误位置后，自动显示（如果用户之前点击过查看）
+                    if (document.getElementById('errorPlace').style.display === 'block') {
+                        document.getElementById('errorPlace').style.display = 'inline';
+                    }
+                })
+                .catch(error => {
+                    // 如果获取错误位置失败，显示'未记录'
+                    document.getElementById('errorPlace').textContent = '未记录';
+                    // 获取失败时也保持显示状态（如果用户之前点击过）
+                    if (document.getElementById('errorPlace').style.display === 'block') {
+                        document.getElementById('errorPlace').style.display = 'inline';
+                    }
+                });
+        }
+        
+        function toggleErrorPlace() {
+            const errorPlaceElement = document.getElementById('errorPlace');
+            if (errorPlaceElement.style.display === 'none') {
+                // 如果当前是隐藏状态，先获取错误位置，然后显示
+                getErrorPlace();
+                errorPlaceElement.style.display = 'inline';
+            } else {
+                // 如果当前是显示状态，隐藏它
+                errorPlaceElement.style.display = 'none';
+            }
+        }
+        
+        function addErrorPlace() {
+            if (currentQuestionId === null) return;
+            
+            // 获取用户输入的错误位置内容
+            const content = prompt('请输入错误位置（如：第X章第X条）：', '第X章第X条');
+            if (!content || content.trim() === '') {
+                showError('错误位置不能为空');
+                return;
+            }
+            
+            showLoading();
+            clearError();
+            
+            fetch('/syllabus/adderrorplace?id=' + currentQuestionId + '&content=' + encodeURIComponent(content.trim()), {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('记录错误位置失败: ' + response.status);
+                    }
+                    return response.text();
+                })
+                .then(result => {
+                    // 更新错误位置显示
+                    getErrorPlace();
+                })
+                .catch(error => {
+                    showError('记录错误位置失败: ' + error.message);
+                })
+                .finally(() => {
+                    hideLoading();
+                });
+        }
+        
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        function showError(message) {
+            document.getElementById('error').textContent = message;
+            document.getElementById('error').style.display = 'block';
+        }
+        
+        function clearError() {
+            document.getElementById('error').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
